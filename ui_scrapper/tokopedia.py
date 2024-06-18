@@ -106,6 +106,7 @@ def scrape(phrase, page):
                 'url': product['url'],
             })
     else:
+        print(response)
         print('Failed to fetch page ' + str(page))
     
     time.sleep(0.5)

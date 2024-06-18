@@ -4,6 +4,9 @@ import os
 import pandas as pd
 import threading
 import webbrowser
+import matplotlib.pyplot as plt
+matplotlib.use('agg')
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from ui_scrapper.blibli import scrape_blibli
 from ui_scrapper.bukalapak import scrape_bukalapak
@@ -86,6 +89,7 @@ def display_search_results():
             result_table["show"] = "headings"
             for col in df.columns[:-1]:
                 result_table.heading(col, text=col)
+                result_table.column(col, width=160)
             for index, row in df.iterrows():
                 result_table.insert("", "end", values=tuple(row[:-1]) )
                 result_table.bind("<Double-1>", lambda e: webbrowser.open_new(e.widget.item(e.widget.selection())['values'][7]))
@@ -105,11 +109,129 @@ def display_search_results():
 
 def render_statistics():
     statistic_position = tk.Frame(root)
-    statistic_position.place(x=screen_width / 110 * 83, y=screen_height / 100 * 4)
+    statistic_position.place(x=screen_width / 110 * 73, y=screen_height / 100 * 4)
 
     # Add a label with the file name above each table
     file_label = tk.Label(statistic_position, text="Statistics")
     file_label.pack()
+
+    # read all excels file
+    excel_files = [f for f in os.listdir("./ui_data") if f.endswith(".xlsx")]
+
+    data = []
+    # Your calculated data for visualization
+    average_prices = []
+    categories = []
+
+    # Initialize lists to store statistics for each file
+    total_data_list = ["Total Data"]
+    average_price_list = ["Average Price"]
+    max_price_list = ["Max Price"]
+    min_price_list = ["Min Price"]
+    average_rating_list = ["Average Rating"]
+    max_rating_list = ["Max Rating"]
+    min_rating_list = ["Min Rating"]
+
+    # render statistics for each file
+    for excel_file in excel_files:
+        file_path = os.path.join("./ui_data", excel_file)
+        file_name = os.path.splitext(excel_file)[0]
+
+        if file_name == "tokopedia":
+            if is_tokopedia_checked.get() == 0:
+                continue
+
+        if file_name == "blibli":
+            if is_blibli_checked.get() == 0:
+                continue
+
+        if file_name == "bukalapak":
+            if is_bukalapak_checked.get() == 0:
+                continue
+
+        df = pd.read_excel(file_path)
+
+        categories.append(file_name)
+
+        # Count total data
+        total_data = len(df.index)
+        total_data_list.append(total_data)
+
+        # Count average price
+        average_price = df['Price'].mean()
+        average_price_list.append(average_price)
+        average_prices.append(average_price)
+
+        # Count max price
+        max_price = df['Price'].max()
+        max_price_list.append(max_price)
+
+        # Count min price
+        min_price = df['Price'].min()
+        min_price_list.append(min_price)
+
+        # Count average rating
+        average_rating = df['Rating'].mean()
+        average_rating_list.append(average_rating)
+
+        # Count max rating
+        max_rating = df['Rating'].max()
+        max_rating_list.append(max_rating)
+
+        # Count min rating
+        min_rating = df['Rating'].min()
+        min_rating_list.append(min_rating)
+
+    # Append all the lists to the data list
+    data.extend([
+        total_data_list,
+        average_price_list,
+        max_price_list,
+        min_price_list,
+        average_rating_list,
+        max_rating_list,
+        min_rating_list
+    ])
+
+    # Create a Treeview widget
+    tree = ttk.Treeview(statistic_position, columns=("metric", "blibli", "bukalapak", "tokopedia"), show='headings')
+
+    # Define the column headings
+    tree.heading("metric", text="Metric")
+    tree.heading("blibli", text="blibli.xlsx")
+    tree.heading("bukalapak", text="bukalapak.xlsx")
+    tree.heading("tokopedia", text="tokopedia.xlsx")
+
+    # Define column widths
+    tree.column("metric", width=120)
+    tree.column("blibli", width=120)
+    tree.column("bukalapak", width=150)
+    tree.column("tokopedia", width=150)
+
+    # Insert the data into the Treeview
+    for row in data:
+        tree.insert("", "end", values=row)
+
+    # Pack the Treeview into the window
+    tree.pack()
+
+    # Create a frame for the chart
+    chart_frame = tk.Frame(statistic_position)
+    chart_frame.pack(side=tk.LEFT, padx=20, pady=20)
+
+    # Create a Matplotlib figure
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    # Plot the bar chart
+    ax.bar(categories, average_prices, color=['blue', 'green', 'red'])
+    ax.set_xlabel('Files')
+    ax.set_title('Average Price Comparison')
+
+    # Add the figure to the Tkinter window
+    canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
 
 def search():
     global scale_var, search_entry, is_tokopedia_checked, is_blibli_checked, is_bukalapak_checked
