@@ -5,6 +5,7 @@ import pandas as pd
 import threading
 import webbrowser
 import matplotlib.pyplot as plt
+import matplotlib
 matplotlib.use('agg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
