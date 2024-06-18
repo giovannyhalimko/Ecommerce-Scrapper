@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import messagebox, ttk
 import os
@@ -8,6 +9,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('agg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from PIL import Image, ImageTk
+import requests
+from io import BytesIO
 
 from ui_scrapper.blibli import scrape_blibli
 from ui_scrapper.bukalapak import scrape_bukalapak
@@ -18,6 +22,7 @@ search_entry = None
 is_tokopedia_checked = None
 is_blibli_checked = None
 is_bukalapak_checked = None
+cart_items = []  # List to store items in the cart
 
 
 # Define a function to create and display the loading screen with a progress bar
@@ -37,14 +42,145 @@ def show_loading_screen():
     
     loading_label = tk.Label(loading_screen, text="Loading, please wait...")
     loading_label.pack(padx=20, pady=10)
-    progress_bar = ttk.Progressbar(loading_screen, orient='horizontal', length=200, mode='indeterminate')
+    
+    progress_bar = ttk.Progressbar(loading_screen, orient='horizontal', length=200, mode='determinate')
     progress_bar.pack(padx=20, pady=10)
-    progress_bar.start()
+    
+    percentage_label = tk.Label(loading_screen, text="0%")
+    percentage_label.pack(padx=20, pady=10)
 
     # Grab the focus to the loading screen, disabling interaction with the main form
     loading_screen.grab_set()
     
-    return loading_screen, progress_bar
+    return loading_screen, progress_bar, percentage_label
+
+# Function to add item to cart
+def show_context_menu(event):
+    # Create a context menu
+    context_menu = tk.Menu(root, tearoff=0)
+
+    # Add "Add to Cart" option
+    context_menu.add_command(label="Add to Cart", command=lambda: add_to_cart(event))
+
+    # Display the context menu at the event coordinates
+    context_menu.post(event.x_root, event.y_root)
+
+def add_to_cart(event):
+    # Get the selected item from the Treeview
+    item = event.widget.item(event.widget.selection())
+    item_values = item['values']
+
+    # Add the item to the cart
+    cart_items.append(item_values)
+
+    # show alert message
+    messagebox.showinfo("Info", "Item added to cart")
+
+# Function to display cart items
+def display_cart():
+    cart_dialog = tk.Toplevel(root)
+    cart_dialog.title("Cart")
+
+    # Calculate the position to center the cart dialog on the screen
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    dialog_width = 500  # Adjusted for card view
+    dialog_height = 400  # Adjusted for card view
+    x = (screen_width - dialog_width) // 2
+    y = (screen_height - dialog_height) // 2
+
+    cart_dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+
+    # Create a canvas to hold the scrollable frame
+    canvas = tk.Canvas(cart_dialog, highlightthickness=0)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    # Add a scrollbar to the canvas
+    scrollbar = ttk.Scrollbar(cart_dialog, orient=tk.VERTICAL, command=canvas.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # Configure the canvas to use the scrollbar
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    # Create a frame inside the canvas to pack the items
+    frame = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=frame, anchor=tk.NW)
+
+    # Function to update scroll region for canvas
+    def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def open_browser(event):
+        widget = event.widget
+        index = int(widget.grid_info()["row"])  # Get the row index of the clicked item
+        if 0 <= index < len(cart_items):
+            url = cart_items[index][7]  # URL is stored in index 7 of each item
+            webbrowser.open_new(url)  # Open URL in default web browser
+
+    def remove_item(index):
+        if 0 <= index < len(cart_items):
+            del cart_items[index]
+            # Clear the frame and re-display items
+            for widget in frame.winfo_children():
+                widget.destroy()
+            populate_cart_items()
+
+    def populate_cart_items():
+        for i, item in enumerate(cart_items):
+          # Create a frame for each item (card view)
+            item_frame = tk.Frame(frame, padx=10, pady=10, bd=1, relief=tk.RAISED, width=600)
+            item_frame.grid(row=i, column=0, sticky="nsew")
+
+            # Load image from URL
+            image_url = item[5]
+            response = requests.get(image_url)
+            img_data = response.content if response.status_code == 200 else b''  # Handle error case
+            img = Image.open(BytesIO(img_data))
+            img = img.resize((100, 100), Image.ADAPTIVE)  # Resize image as needed
+
+            # Convert image for Tkinter
+            img_tk = ImageTk.PhotoImage(img)
+
+            # Create label to display image
+            img_label = tk.Label(item_frame, image=img_tk)
+            img_label.image = img_tk  # Keep reference to avoid garbage collection
+            img_label.grid(row=0, column=0, padx=10, sticky='w')
+
+            # Create a frame for item details
+            details_frame = tk.Frame(item_frame)
+            details_frame.grid(row=0, column=1, padx=10, sticky='nsew')
+
+            # Create label to display item name
+            name_label = tk.Label(details_frame, text=f"Name: {item[3]}", wraplength=300, anchor='w')
+            name_label.pack(fill='x', padx=10)
+
+            # Create label to display item price
+            price_label = tk.Label(details_frame, text=f"Price: {item[4]} IDR")
+            price_label.pack(anchor='w', padx=10)
+
+            # Create a button to remove the item
+            remove_button = tk.Button(details_frame, text="Remove", command=lambda idx=i: remove_item(idx))
+            remove_button.pack(anchor='e', padx=10, pady=10)
+
+            # Bind double-click event to open browser
+            item_frame.bind("<Double-1>", open_browser)
+            
+            # Configure grid column and row weights to make the item_frame expandable
+            item_frame.grid_columnconfigure(1, weight=1)
+            item_frame.grid_rowconfigure(0, weight=1)
+
+    frame.bind("<Configure>", on_frame_configure)
+
+    # Populate the frame with cart items
+    populate_cart_items()
+
+    # Update canvas scroll region after populating items
+    canvas.update_idletasks()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+    # Bind mouse wheel event to canvas
+    canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(-1 * int(event.delta/120), "units"))
+
 
 def display_search_results():
     # Hide the main form
@@ -86,14 +222,17 @@ def display_search_results():
             # Display the data in a table format (you can use a Ttk Treeview widget for this)
             # Here's a simple example:
             result_table = ttk.Treeview(table_position, height=13)
-            result_table["columns"] = tuple(df.columns[:-1])
+            result_table["columns"] = tuple(df.columns)
             result_table["show"] = "headings"
-            for col in df.columns[:-1]:
+            for col in df.columns:
                 result_table.heading(col, text=col)
-                result_table.column(col, width=160)
+                result_table.column(col, width=140)
             for index, row in df.iterrows():
-                result_table.insert("", "end", values=tuple(row[:-1]) )
+                result_table.insert("", "end", values=tuple(row) )
                 result_table.bind("<Double-1>", lambda e: webbrowser.open_new(e.widget.item(e.widget.selection())['values'][7]))
+
+            # Bind right-click to show context menu
+            result_table.bind("<Button-3>", show_context_menu)
             result_table.pack(padx=20, pady=20)
 
             height += 320
@@ -101,6 +240,10 @@ def display_search_results():
         # Add a button to display the main form again
         display_form_button = tk.Button(root, text="Search Again", command=display_main_form)
         display_form_button.place(x=screen_width - 100, y = 10)
+
+        # Create a cart button
+        cart_button = tk.Button(root, text="Cart", command=display_cart)
+        cart_button.place(x=screen_width - 150, y=10)  # Adjust the position as needed
 
         render_statistics()
         
@@ -195,19 +338,15 @@ def render_statistics():
     ])
 
     # Create a Treeview widget
-    tree = ttk.Treeview(statistic_position, columns=("metric", "blibli", "bukalapak", "tokopedia"), show='headings')
+    columns = ["metric"] + categories
+    tree = ttk.Treeview(statistic_position, columns=columns, show='headings')
 
     # Define the column headings
     tree.heading("metric", text="Metric")
-    tree.heading("blibli", text="blibli.xlsx")
-    tree.heading("bukalapak", text="bukalapak.xlsx")
-    tree.heading("tokopedia", text="tokopedia.xlsx")
-
-    # Define column widths
     tree.column("metric", width=120)
-    tree.column("blibli", width=120)
-    tree.column("bukalapak", width=150)
-    tree.column("tokopedia", width=150)
+    for item in categories:
+        tree.heading(item, text=item)
+        tree.column(item, width=120)
 
     # Insert the data into the Treeview
     for row in data:
@@ -266,15 +405,21 @@ def search():
         scraping_tasks.append((scrape_bukalapak, (page, search_query)))
 
     # Create and display the loading screen with a progress bar
-    loading_screen, progress_bar = show_loading_screen()
+    loading_screen, progress_bar, percentage_label = show_loading_screen()
 
     # Define a function to execute each scraping task in a separate thread
     def execute_scraping_tasks():
-        for task in scraping_tasks:
+        total_tasks = len(scraping_tasks)
+        for i, task in enumerate(scraping_tasks):
             scraping_function, args = task
             scraping_thread = threading.Thread(target=scraping_function, args=args)
             scraping_thread.start()
             scraping_thread.join()  # Wait for each thread to finish before moving to the next
+
+            # Update the progress bar and percentage label
+            progress = (i + 1) / total_tasks * 100
+            progress_bar['value'] = progress
+            percentage_label.config(text=f"{int(progress)}%")
 
         # Close the loading screen after all tasks are finished
         loading_screen.destroy()
@@ -343,7 +488,11 @@ def display_main_form():
 
     # Create a search button
     search_button = tk.Button(frame, text="Search", command=search)
-    search_button.pack(pady=10)
+    search_button.pack(side=tk.LEFT, padx=(0, 5))
+
+    # Create a cart button
+    cart_button = tk.Button(frame, text="Cart", command=display_cart)
+    cart_button.pack(side=tk.RIGHT)  # Adjust the position as needed
 
 
 # Create the Tkinter window
