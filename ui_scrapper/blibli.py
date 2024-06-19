@@ -15,6 +15,8 @@ import json
 products = []
 
 blibli_searching_base_api_url = "https://www.blibli.com/backend/search/products"
+
+driver = None
     
 def process_cdp_event(data, driver):
     event_type = data.get("method")
@@ -76,8 +78,11 @@ def process_cdp_event(data, driver):
                         print("Failed to parse the response body as JSON.")
 
 
-def scrape(driver, phrase, page):
+def scrape(driver, phrase, page, is_rating_above_four=False):
     base_url = 'https://www.blibli.com/backend/search/products?page=' + str(page) + '&start=0&searchTerm=' + phrase
+
+    if is_rating_above_four:
+        base_url += '&rating=4'
 
     # memasangkan event listener untuk CDP (Chrome DevTools Protocol) agar kita dapat mengakses data yang diambil oleh browser
     driver.add_cdp_listener("*", lambda data: process_cdp_event(data, driver))
@@ -87,21 +92,21 @@ def scrape(driver, phrase, page):
     driver.execute_script("location.reload(true);")
     time.sleep(1.2)
 
-def scrape_blibli(max_page, phrase):
-    page = 1
+def scrape_blibli(page, phrase, max_page, is_rating_above_four):
     global products
-    products = []
+    global driver
 
-    # mendefinisikan driver yang akan digunakan (seleniumbase)
-    with Driver(undetectable=True, uc_cdp_events=True, headless=False, uc=True) as driver:
-        while page <= max_page:
-            scrape(driver, phrase, page)
-            display_progress(page, max_page, 100)
+    if page == 1:
+        driver = Driver(undetectable=True, uc_cdp_events=True, headless=False, uc=True)
 
-            page += 1
-            time.sleep(0.5)
+    scrape(driver, phrase, page, is_rating_above_four)
+    time.sleep(0.5)
+
+    print(f"Scraping Finished Page {page} of Blibli!")
+
+    if page == max_page:
         write_to_excel(products, './ui_data/blibli.xlsx')
+        products.clear()
+        driver.quit()
 
-    driver.quit()
-        
-    print("\nScrapping Finished Blibli!")
+    

@@ -22,6 +22,7 @@ search_entry = None
 is_tokopedia_checked = None
 is_blibli_checked = None
 is_bukalapak_checked = None
+is_rating_above_four_checked = None
 cart_items = []  # List to store items in the cart
 
 
@@ -227,7 +228,7 @@ def display_search_results():
             for col in df.columns:
                 result_table.heading(col, text=col)
                 result_table.column(col, width=140)
-            for index, row in df.iterrows():
+            for _, row in df.iterrows():
                 result_table.insert("", "end", values=tuple(row) )
                 result_table.bind("<Double-1>", lambda e: webbrowser.open_new(e.widget.item(e.widget.selection())['values'][7]))
 
@@ -374,7 +375,7 @@ def render_statistics():
 
 
 def search():
-    global scale_var, search_entry, is_tokopedia_checked, is_blibli_checked, is_bukalapak_checked
+    global scale_var, search_entry, is_tokopedia_checked, is_blibli_checked, is_bukalapak_checked, is_rating_above_four_checked
 
     # Disable the main form
     root.withdraw()
@@ -396,30 +397,37 @@ def search():
 
     # Create a list of tuples with the scraping functions and their arguments
     scraping_tasks = []
+    total_pages = 0
 
     if is_tokopedia_checked.get() == 1:
-        scraping_tasks.append((scrape_tokopedia, (page, search_query)))
+        scraping_tasks.append((scrape_tokopedia, (page, search_query, is_rating_above_four_checked.get() == 1)))
+        total_pages += page
     if is_blibli_checked.get() == 1:
-        scraping_tasks.append((scrape_blibli, (page, search_query)))
+        scraping_tasks.append((scrape_blibli, (page, search_query, is_rating_above_four_checked.get() == 1)))
+        total_pages += page
     if is_bukalapak_checked.get() == 1:
-        scraping_tasks.append((scrape_bukalapak, (page, search_query)))
+        scraping_tasks.append((scrape_bukalapak, (page, search_query, is_rating_above_four_checked.get() == 1)))
+        total_pages += page
 
     # Create and display the loading screen with a progress bar
     loading_screen, progress_bar, percentage_label = show_loading_screen()
 
     # Define a function to execute each scraping task in a separate thread
     def execute_scraping_tasks():
-        total_tasks = len(scraping_tasks)
-        for i, task in enumerate(scraping_tasks):
-            scraping_function, args = task
-            scraping_thread = threading.Thread(target=scraping_function, args=args)
-            scraping_thread.start()
-            scraping_thread.join()  # Wait for each thread to finish before moving to the next
+        total_pages_scraped = 0
+        for scraping_function, args in scraping_tasks:
+            max_page, _, _ = args
+            for page_number in range(1, max_page + 1):
+                scraping_thread = threading.Thread(target=scraping_function, args=(page_number, args[1], max_page, args[2]))
+                scraping_thread.start()
+                scraping_thread.join()  # Wait for each thread to finish before moving to the next
 
-            # Update the progress bar and percentage label
-            progress = (i + 1) / total_tasks * 100
-            progress_bar['value'] = progress
-            percentage_label.config(text=f"{int(progress)}%")
+                total_pages_scraped += 1
+
+                # Update the progress bar and percentage label
+                progress = total_pages_scraped / total_pages * 100
+                progress_bar['value'] = progress
+                percentage_label.config(text=f"{int(progress)}%")
 
         # Close the loading screen after all tasks are finished
         loading_screen.destroy()
@@ -439,7 +447,7 @@ def hide_main_form():
 def display_main_form():
     hide_main_form()
 
-    global scale_var, search_entry, is_tokopedia_checked, is_blibli_checked, is_bukalapak_checked
+    global scale_var, search_entry, is_tokopedia_checked, is_blibli_checked, is_bukalapak_checked, is_rating_above_four_checked
 
     # Calculate the coordinates for centering the search bar
     x = (screen_width - 400) / 2  # Assuming the search bar width is 400
@@ -473,6 +481,10 @@ def display_main_form():
     scale_var = tk.IntVar()
     scale = tk.Scale(page_input_frame, from_=1, to=100, orient=tk.HORIZONTAL, variable=scale_var)
     scale.pack(side=tk.LEFT, padx=(0, 5))  # Add right padding to separate from checkbox
+
+    is_rating_above_four_checked = tk.IntVar()
+    rating_above_four_checkbox = tk.Checkbutton(page_input_frame, text="Rating above 4", variable=is_rating_above_four_checked)
+    rating_above_four_checkbox.pack(side=tk.RIGHT, padx=(180, 100))
 
     # Create a frame to hold the search bar
     frame = tk.Frame(root)

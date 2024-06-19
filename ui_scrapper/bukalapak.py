@@ -83,7 +83,7 @@ def obtain_access_token():
 
     driver.quit()
     
-def scrape(phrase, page):
+def scrape(phrase, page, is_rating_above_four=False):
     global products
     global access_token
     
@@ -91,11 +91,15 @@ def scrape(phrase, page):
         'prambanan_override': True,
         'keywords': phrase,
         'limit': 50,
-        'offset': 50,
         'page': page,
         'facet': True,
         'access_token': access_token
     }
+
+    parameter['offset'] = (parameter['page'] - 1) * parameter['limit']
+
+    if is_rating_above_four:
+        parameter['rating'] = '4:5'
 
     response = requests.get(api_url, params=parameter)
     if response.status_code == 200:
@@ -122,21 +126,18 @@ def scrape(phrase, page):
         print('Failed to fetch page ' + str(page))
 
 
-def scrape_bukalapak(max_page, phrase):
-    obtain_access_token()
+def scrape_bukalapak(page, phrase, max_page, is_rating_above_four):
+    if page == 1:
+        obtain_access_token()
 
-    page = 1
+    scrape(phrase, page, is_rating_above_four)
+    time.sleep(0.5)
 
-    while page <= max_page:
-        scrape(phrase, page)
-        display_progress(page, max_page, 100)
+    print(f"Scraping Finished Page {page} of Bukalapak!")
 
-        page += 1
+    # Move write_to_excel outside the loop in the caller function
+    if page == max_page:
+        write_to_excel(products, './ui_data/bukalapak.xlsx')
+        products.clear()
 
-        time.sleep(0.5)
     
-    write_to_excel(products, './ui_data/bukalapak.xlsx')
-
-    products.clear()
-
-    print("\nScrapping Finished Bukalapak!")
